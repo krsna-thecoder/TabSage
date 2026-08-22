@@ -1,0 +1,32 @@
+# ── Python / backend ──────────────────────────────────────────
+backend/.venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Secrets (NEVER commit) ────────────────────────────────────
+.env
+backend/.env
+*.key
+*.pem
+
+# ── Vector store / local data ─────────────────────────────────
+chroma_db/
+backend/chroma_db/
+*.sqlite3
+
+# ── Build / packaging artifacts ───────────────────────────────
+dist/
+build/
+*.zip
+extension/*.zip
+
+# ── Editor / OS ───────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

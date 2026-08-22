@@ -1,0 +1,23 @@
+# TabSage backend dependencies (pinned to resolved versions on Python 3.13).
+# Install:  pip install -r requirements.txt
+
+# ── Web framework / server ────────────────────────────────────
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+gunicorn==26.1.0            # production start (Linux host); not used on Windows dev
+
+# ── Config / validation ───────────────────────────────────────
+pydantic==2.13.4
+pydantic-settings==2.15.0
+python-dotenv==1.2.3
+
+# ── Providers (BYOK) ──────────────────────────────────────────
+# ⚠️ google-generativeai is DEPRECATED (support ended). Plan to migrate to
+#    the `google-genai` SDK in Phase 2. Pinned here to match the checklist.
+google-generativeai==0.8.6
+openai==3.3.1              # optional provider
+
+# ── RAG ───────────────────────────────────────────────────────
+# Only the text splitter subpackage of LangChain is needed (lighter than full `langchain`).
+langchain-text-splitters==1.1.2
+chromadb==1.5.9            # dev vector store
