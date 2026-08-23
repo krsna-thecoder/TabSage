@@ -9,6 +9,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from config import settings
+
 
 class Provider(str, Enum):
     """Supported model providers (BYOK)."""
@@ -22,12 +24,16 @@ class HealthResponse(BaseModel):
 
 
 class IngestRequest(BaseModel):
-    """Body for POST /ingest (endpoint wired in Phase 6)."""
+    """Body for POST /ingest."""
 
     tab_id: str = Field(..., description="Stable id for the source tab.")
     title: str = Field(..., description="Page title, used in citations.")
     url: str = Field(..., description="Page URL, used in citations.")
-    text: str = Field(..., description="Extracted visible page text.")
+    text: str = Field(
+        ...,
+        min_length=1,
+        description="Extracted visible page text.",
+    )
     session_id: str = Field(..., description="Extension-owned session id.")
     provider: Provider = Field(
         default=Provider.gemini,
@@ -51,9 +57,14 @@ class Citation(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    """Body for POST /chat (endpoint wired in Phase 6)."""
+    """Body for POST /chat."""
 
-    question: str = Field(..., description="The user's study question.")
+    question: str = Field(
+        ...,
+        min_length=1,
+        max_length=settings.max_question_chars,
+        description="The user's study question.",
+    )
     session_id: str = Field(..., description="Extension-owned session id.")
     source_tab_ids: list[str] | None = Field(
         default=None,
@@ -68,3 +79,21 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     citations: list[Citation] = Field(default_factory=list)
+    grounded: bool = Field(
+        default=True,
+        description=(
+            "True when the answer came from the selected tabs; False for the "
+            "honest 'not in your tabs' refusal (no citations)."
+        ),
+    )
+
+
+class SessionResetRequest(BaseModel):
+    """Body for POST /sessions/reset (also used when switching providers)."""
+
+    session_id: str = Field(..., description="Session to clear.")
+
+
+class SessionResetResponse(BaseModel):
+    session_id: str
+    chunks_removed: int
