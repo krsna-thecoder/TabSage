@@ -22,3 +22,8 @@ openai==3.3.1              # optional provider
 # Only the text splitter subpackage of LangChain is needed (lighter than full `langchain`).
 langchain-text-splitters==1.1.2
 chromadb==1.5.9            # dev vector store
+
+# ── Tests (Phase 11; dev/CI only) ─────────────────────────────
+# Automated pytest suite — no real provider key needed (providers are mocked).
+# `httpx` (already pulled in transitively) powers FastAPI's TestClient.
+pytest==8.4.2
