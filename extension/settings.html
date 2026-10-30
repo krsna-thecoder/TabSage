@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TabSage — Settings</title>
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="product-name">
+        <span class="product-mark" aria-hidden="true">T</span>
+        <span>TabSage</span>
+      </div>
+
+      <div class="header-actions">
+        <span class="header-context">Settings</span>
+        <div class="theme-control">
+          <button
+            id="themeButton"
+            class="icon-button"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-label="Appearance: System"
+            title="Appearance: System"
+          >
+            <svg data-theme-icon="system" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.7" />
+              <path d="M8 21h8M12 18v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+            </svg>
+            <svg data-theme-icon="light" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.7" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+            </svg>
+            <svg data-theme-icon="dark" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M20.2 15.3A8.5 8.5 0 0 1 8.7 3.8 8.5 8.5 0 1 0 20.2 15.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+            </svg>
+          </button>
+
+          <div id="themeMenu" class="theme-menu hidden" role="menu" aria-label="Appearance">
+            <button class="theme-option" type="button" role="menuitemradio" data-appearance="system">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 21h8M12 18v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              <span>System</span><span class="check" data-check>✓</span>
+            </button>
+            <button class="theme-option" type="button" role="menuitemradio" data-appearance="light">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.7"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              <span>Light</span><span class="check hidden" data-check>✓</span>
+            </button>
+            <button class="theme-option" type="button" role="menuitemradio" data-appearance="dark">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 15.3A8.5 8.5 0 0 1 8.7 3.8 8.5 8.5 0 1 0 20.2 15.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+              <span>Dark</span><span class="check hidden" data-check>✓</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="settings-page">
+      <div class="page-heading">
+        <h1>Settings</h1>
+        <p>Configure the model TabSage uses for your selected tabs.</p>
+      </div>
+
+      <section class="settings-section" aria-labelledby="modelHeading">
+        <div class="section-heading">
+          <div>
+            <h2 id="modelHeading">Model</h2>
+            <p>Your key stays in this browser.</p>
+          </div>
+          <span id="keyBadge" class="key-state"><span class="key-dot"></span><span id="keyBadgeText">Not configured</span></span>
+        </div>
+
+        <form id="settingsForm" novalidate>
+          <div class="form-field">
+            <label class="field-label" for="provider">Provider</label>
+            <select id="provider" name="provider" class="select-input"></select>
+          </div>
+
+          <div class="form-field">
+            <label class="field-label" for="apiKey">API key</label>
+            <div class="key-input-row">
+              <input id="apiKey" name="apiKey" class="text-input" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your provider key" />
+              <button id="toggleReveal" type="button" class="button" aria-pressed="false">Show</button>
+            </div>
+            <a id="getKeyLink" class="text-link get-key-link" href="#" target="_blank" rel="noopener noreferrer">Get a free key in Google AI Studio</a>
+          </div>
+
+          <div class="form-actions">
+            <button id="saveBtn" type="submit" class="button button-primary">Save</button>
+            <button id="clearBtn" type="button" class="button button-danger" disabled>Clear key</button>
+            <span id="status" class="status" role="status" aria-live="polite"></span>
+          </div>
+        </form>
+      </section>
+
+      <p class="storage-note">Your API key is stored in <code>chrome.storage.local</code> and sent only when calling your selected provider through the backend.</p>
+    </main>
+
+    <script type="module" src="settings.js"></script>
+  </body>
+</html>

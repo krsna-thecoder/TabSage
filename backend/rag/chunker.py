@@ -4,13 +4,17 @@ Uses LangChain's `RecursiveCharacterTextSplitter`, which tries to break on the
 most natural boundary available (paragraph → line → sentence → word) before
 falling back to a hard character cut. That keeps most chunks semantically whole.
 
-Why ~800 chars / ~150 overlap:
-  * 800 characters is roughly a paragraph or two — big enough to carry a
-    self-contained idea, small enough that a single chunk stays on-topic and
-    embeds precisely. Oversized chunks blur meaning and hurt retrieval.
+Why ~1500 chars / ~150 overlap:
+  * 1500 characters is roughly several paragraphs — large enough to carry a
+    self-contained idea while keeping the chunk count (and therefore the number
+    of embedding calls) low, which is the main driver of ingest latency. A
+    typical article lands in a handful of chunks, so one page is usually a
+    single batched embedding request.
   * 150 characters of overlap (~one or two sentences) means a concept that
     straddles a boundary still appears whole in at least one chunk, so
     retrieval doesn't miss an answer that happens to land on a chunk edge.
+  * Earlier builds used 800; it embedded precisely but produced roughly twice
+    the chunks, so ingesting long study pages was noticeably slower.
 These are defaults; they're tunable in Phase 11 against a small eval set.
 
 Each chunk carries the metadata needed downstream for storage, session
@@ -26,7 +30,7 @@ from typing import Any
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Defaults (characters). See module docstring for the rationale.
-DEFAULT_CHUNK_SIZE = 800
+DEFAULT_CHUNK_SIZE = 1500
 DEFAULT_CHUNK_OVERLAP = 150
 
 # Preferred split boundaries, most-natural first. The empty string is the final

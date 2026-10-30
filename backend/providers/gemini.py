@@ -29,6 +29,13 @@ from .base import (
 GEMINI_EMBEDDING_MODEL = "gemini-embedding-001"
 GEMINI_GENERATION_MODEL = "gemini-3.6-flash"
 
+# Reduced embedding size (Matryoshka). gemini-embedding-001 defaults to 3072
+# dimensions; 768 keeps strong retrieval quality while cutting the embedding
+# response payload and the vectors we store/compare ~4x, which trims both
+# ingest and query latency. Cosine similarity is scale-invariant and Chroma
+# uses cosine space, so no manual re-normalization is needed at this dimension.
+GEMINI_EMBEDDING_DIM = 768
+
 
 def _map_error(exc: Exception) -> ProviderError:
     """Map google-genai errors onto TabSage's normalized provider errors."""
@@ -54,6 +61,14 @@ class GeminiProvider(BaseProvider):
     provider_name = "gemini"
     embedding_model = GEMINI_EMBEDDING_MODEL
     generation_model = GEMINI_GENERATION_MODEL
+    embedding_dim = GEMINI_EMBEDDING_DIM
+
+    @property
+    def embedding_model_id(self) -> str:
+        # Include the output dimension: a session built at one dimension is not
+        # comparable to vectors at another, so the store's consistency guard
+        # must treat a dimension change like a model change.
+        return f"{self.provider_name}:{self.embedding_model}@{self.embedding_dim}"
 
     def __init__(self, api_key: str) -> None:
         super().__init__(api_key)
@@ -64,6 +79,9 @@ class GeminiProvider(BaseProvider):
         items = list(texts)
         if not items:
             return []
+        config = genai_types.EmbedContentConfig(
+            output_dimensionality=self.embedding_dim
+        )
         out: list[list[float]] = []
         for start in range(0, len(items), self.embed_batch_size):
             batch = items[start : start + self.embed_batch_size]
@@ -71,7 +89,7 @@ class GeminiProvider(BaseProvider):
             def call(batch: list[str] = batch) -> list[list[float]]:
                 try:
                     resp = self._client.models.embed_content(
-                        model=self.embedding_model, contents=batch
+                        model=self.embedding_model, contents=batch, config=config
                     )
                     return [list(e.values) for e in resp.embeddings]
                 except Exception as exc:  # noqa: BLE001 - normalized below

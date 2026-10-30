@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TabSage</title>
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="product-name">
+          <span class="product-mark" aria-hidden="true">T</span>
+          <span>TabSage</span>
+        </div>
+
+        <div class="header-actions">
+          <div class="theme-control">
+            <button
+              id="themeButton"
+              class="icon-button"
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-label="Appearance: System"
+              title="Appearance: System"
+            >
+              <svg data-theme-icon="system" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.7" />
+                <path d="M8 21h8M12 18v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+              </svg>
+              <svg data-theme-icon="light" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.7" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+              </svg>
+              <svg data-theme-icon="dark" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M20.2 15.3A8.5 8.5 0 0 1 8.7 3.8 8.5 8.5 0 1 0 20.2 15.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+              </svg>
+            </button>
+
+            <div id="themeMenu" class="theme-menu hidden" role="menu" aria-label="Appearance">
+              <button class="theme-option" type="button" role="menuitemradio" data-appearance="system">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 21h8M12 18v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                <span>System</span><span class="check" data-check>✓</span>
+              </button>
+              <button class="theme-option" type="button" role="menuitemradio" data-appearance="light">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.7"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                <span>Light</span><span class="check hidden" data-check>✓</span>
+              </button>
+              <button class="theme-option" type="button" role="menuitemradio" data-appearance="dark">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 15.3A8.5 8.5 0 0 1 8.7 3.8 8.5 8.5 0 1 0 20.2 15.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+                <span>Dark</span><span class="check hidden" data-check>✓</span>
+              </button>
+            </div>
+          </div>
+
+          <button id="openSettings" class="icon-button" type="button" aria-label="Open settings" title="Settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+              <circle cx="16" cy="7" r="2" stroke="currentColor" stroke-width="1.7" />
+              <circle cx="8" cy="17" r="2" stroke="currentColor" stroke-width="1.7" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div id="sourcesBar" class="sources-bar hidden">
+        <span class="sources-label">Tabs</span>
+        <div id="sourcesList" class="sources-list"></div>
+        <button id="resetButton" class="button button-danger sources-reset" type="button" title="Clear all tabs and start a new session">
+          Reset
+        </button>
+      </div>
+
+      <main id="conversation" class="conversation">
+        <section id="needsKey" class="empty-message">
+          <h1>Ask your tabs anything</h1>
+          <p>Connect a model to start studying from the pages you choose.</p>
+          <button id="addKeyButton" class="button" type="button">Open settings</button>
+        </section>
+
+        <section id="ready" class="empty-message hidden">
+          <h1>What are you studying?</h1>
+          <p>Add a tab with the + button, then ask a question about it.</p>
+          <span id="providerName" class="provider-note"></span>
+        </section>
+
+        <div id="messages" class="messages hidden" aria-live="polite"></div>
+      </main>
+
+      <footer class="composer-area">
+        <p id="composerHint" class="composer-hint">Add an API key in Settings to begin.</p>
+        <div class="composer">
+          <button id="addTabButton" class="composer-action" type="button" disabled aria-label="Add current tab" title="Add this tab">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+          <input id="askInput" type="text" placeholder="Ask about your tabs" disabled />
+          <button id="sendButton" class="send-button" type="button" disabled aria-label="Send question">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 7-7 7 7M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <p class="privacy-note">TabSage only reads tabs you explicitly add.</p>
+      </footer>
+    </div>
+
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

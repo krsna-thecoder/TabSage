@@ -193,7 +193,7 @@ def _fake_embed_models():
     recorder: list[list[str]] = []
 
     class Models:
-        def embed_content(self, model, contents):
+        def embed_content(self, model, contents, config=None):
             recorder.append(list(contents))
             return SimpleNamespace(
                 embeddings=[SimpleNamespace(values=[0.1, 0.2, 0.3]) for _ in contents]
@@ -224,7 +224,7 @@ def test_gemini_embed_maps_bad_request(monkeypatch):
     p = GeminiProvider("fake-key")
 
     class Models:
-        def embed_content(self, model, contents):
+        def embed_content(self, model, contents, config=None):
             raise _api_err(400)
 
     p._client = SimpleNamespace(models=Models())

@@ -93,7 +93,7 @@ Git repository (one project)
 ### Request flow
 
 1. Once, the user pastes their provider key into TabSage settings; it is saved in `chrome.storage`.
-2. The user adds tabs to the session **one at a time**: while a tab is active, the user clicks "Add this tab," which grants `activeTab` access to *that* page only. Repeating this on other tabs builds a multi-tab knowledge base without ever reading tabs in the background.
+2. The user adds tabs to the session **one at a time**: while a tab is active, the user clicks "Add this tab," which triggers the extractor on *that* page only (the worker injects into just that tab). Repeating this on other tabs builds a multi-tab knowledge base without ever reading tabs in the background.
 3. A content script reads visible text from that one active page only.
 4. It messages the service worker, which sends authenticated JSON — **including the user's key** — to `/ingest`.
 5. The backend uses the key to create embeddings and stores chunks with source metadata, scoped to that session.
@@ -101,7 +101,19 @@ Git repository (one project)
 7. The backend retrieves the top chunks, prompts the model to answer only from that context, and returns an answer plus citations.
 8. The extension renders the answer and source links.
 
-> **Permission model:** TabSage never reads multiple tabs simultaneously or in the background. Each tab enters the knowledge base through a deliberate "Add this tab" gesture on the active tab, which is exactly what `activeTab` grants. This keeps the extension at **least privilege** (no broad `host_permissions` over arbitrary sites) and simplifies Chrome Web Store review, while still delivering the "study across many tabs" experience.
+> **Permission model:** TabSage never reads multiple tabs simultaneously or in
+> the background. Each tab enters the knowledge base through a deliberate
+> "Add this tab" gesture; only then does the service worker inject the extractor
+> into the active tab. **Implementation note:** with a persistent side panel, the
+> "Add this tab" button is not an extension *invocation*, so `activeTab` alone is
+> not reliably granted for the current tab. The extension therefore declares
+> `host_permissions` for `http://*/*` and `https://*/*` so the worker can read a
+> page the moment the user adds it. The **least-privilege guarantee is preserved
+> by behavior, not by the permission scope**: the extractor runs *only* on the
+> explicit "Add this tab" click, never in the background and never across tabs at
+> once, and the content script makes no network calls. The trade-off (a broader
+> host permission in exchange for the "study across many tabs" UX actually
+> working) must be disclosed and justified at Chrome Web Store review (Phase 12).
 
 ## 6. Provider Abstraction
 
@@ -239,7 +251,7 @@ The Store receives a ZIP containing the **contents of `extension/` only**. The P
 Release sequence:
 1. Deploy the (secret-stateless) HTTPS backend and verify `/health`.
 2. Set the production API URL in the extension configuration.
-3. Scope `host_permissions` to that exact API URL.
+3. Set `host_permissions` to the production API origin **plus** the page origins the extractor needs (`https://*/*`; `http://*/*` only if non-HTTPS study sites must be supported). Justify the page-read permission in the Store listing.
 4. Build the extension ZIP; verify it contains no keys, `.env`, source maps, or backend files.
 5. Create/complete a Chrome Web Store developer account (registration + applicable fee).
 6. Upload the ZIP, listing assets, support URL, and privacy-policy URL.

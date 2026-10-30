@@ -59,5 +59,5 @@ def test_overlap_must_be_smaller_than_size():
 
 
 def test_default_tuning_constants():
-    assert DEFAULT_CHUNK_SIZE == 800
+    assert DEFAULT_CHUNK_SIZE == 1500
     assert DEFAULT_CHUNK_OVERLAP == 150

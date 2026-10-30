@@ -30,3 +30,6 @@ extension/*.zip
 .idea/
 .DS_Store
 Thumbs.db
+
+# ── Local scratch / manual test notes (not for the repo) ──────
+test.txt
