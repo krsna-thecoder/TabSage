@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     # CORS: comma-separated allowed origins (NEVER "*").
     allowed_origins: str = "http://localhost,http://localhost:8000"
 
+    # Optional CORS regex, applied IN ADDITION to the exact list above. Defaults
+    # to "any Chromium browser-extension origin" so the extension works across
+    # unpacked dev / Edge / Chrome without chasing each store's extension id.
+    # CORS is not a security boundary here (requests still need the user's key
+    # and are rate-limited); this only governs what browser JS may read. Set to
+    # "" to disable the regex and fall back to the exact list only.
+    allowed_origin_regex: str = r"^chrome-extension://[a-z]{32}$"
+
     # Server bind (local dev)
     host: str = "127.0.0.1"
     port: int = 8000

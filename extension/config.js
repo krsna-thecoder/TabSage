@@ -15,16 +15,19 @@
 //   "prod" → deployed HTTPS backend (set the real host before publishing)
 // NOTE: whatever origin is active here must also be allowed by
 // `host_permissions` in manifest.json (dev: http://localhost:8000/*).
-export const ENV = "dev";
+export const ENV = "prod";
 
 const API_BASE_URLS = {
   dev: "http://localhost:8000",
-  // Placeholder — replaced with the real HTTPS endpoint in Phase 13.
-  prod: "https://api.tabsage.example",
+  // Live backend on AWS EC2 (Caddy auto-HTTPS + DuckDNS).
+  prod: "https://tabsage.duckdns.org",
 };
 
 /** The active backend base URL (no trailing slash). */
 export const API_BASE_URL = API_BASE_URLS[ENV];
+
+/** Public privacy policy — served by the backend (see GET /privacy). */
+export const PRIVACY_POLICY_URL = `${API_BASE_URL}/privacy`;
 
 /** Keys used in chrome.storage.local. Centralized so they never drift. */
 export const STORAGE_KEYS = Object.freeze({
@@ -34,6 +37,7 @@ export const STORAGE_KEYS = Object.freeze({
   clientToken: "tabsage.clientToken",
   sources: "tabsage.sources",
   appearance: "tabsage.appearance",
+  privacyAccepted: "tabsage.privacyAccepted",
 });
 
 /** Appearance preferences. `system` follows the operating-system setting. */

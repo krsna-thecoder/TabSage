@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabSage — Study from your tabs",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Ask questions answered only from the study tabs you choose, with citations. Bring your own free Gemini key.",
   "permissions": [
     "storage",
@@ -10,8 +10,6 @@
     "sidePanel"
   ],
   "host_permissions": [
-    "http://localhost:8000/*",
-    "http://*/*",
     "https://*/*"
   ],
   "background": {

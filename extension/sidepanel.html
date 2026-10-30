@@ -100,8 +100,30 @@
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 7-7 7 7M12 5v14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </div>
-        <p class="privacy-note">TabSage only reads tabs you explicitly add.</p>
+        <p class="privacy-note">TabSage only reads tabs you explicitly add. <a id="privacyLink" class="privacy-link" target="_blank" rel="noopener noreferrer">Privacy</a></p>
       </footer>
+    </div>
+
+    <div id="consentOverlay" class="consent-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
+      <div class="consent-card">
+        <h2 id="consentTitle">Before you add a tab</h2>
+        <p>
+          When you add a tab, TabSage sends that page's text, title, and URL —
+          and the questions you ask — over HTTPS to the TabSage backend and on to
+          your chosen AI provider (Google Gemini or OpenAI), using
+          <strong>your own API key</strong>, to produce answers with citations.
+        </p>
+        <ul>
+          <li>Only tabs you explicitly add are read — never in the background.</li>
+          <li>Your API key is stored <strong>only on your device</strong> and used transiently to call your provider; it is never stored on the server.</li>
+          <li>Session data is temporary and is cleared on Reset or after inactivity.</li>
+        </ul>
+        <a id="consentPolicyLink" class="consent-link" target="_blank" rel="noopener noreferrer">Read the full privacy policy</a>
+        <div class="consent-actions">
+          <button id="consentCancel" class="button button-ghost" type="button">Cancel</button>
+          <button id="consentAccept" class="button" type="button">I understand — continue</button>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="sidepanel.js"></script>

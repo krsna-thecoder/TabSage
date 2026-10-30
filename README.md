@@ -44,6 +44,42 @@ uvicorn main:app --reload      # http://localhost:8000/docs
 > from the extension settings (or the `X-Provider-Key` header in Swagger), exactly
 > as a real user would.
 
+## Install
+
+> **You need your own free Google Gemini API key** (or an OpenAI key). Get a free
+> Gemini key at <https://aistudio.google.com/app/apikey>. Your key is stored only
+> in your browser and is never stored on TabSage's servers — see the
+> [privacy policy](https://tabsage.duckdns.org/privacy).
+
+### Microsoft Edge (store)
+
+Install from the Edge Add-ons listing: _&lt;link once published&gt;_ → **Get**,
+then open the TabSage side panel from the toolbar.
+
+### Chrome or Edge (load unpacked)
+
+Works today, no store needed:
+
+1. Download this repo (**Code → Download ZIP**, or `git clone`) and unzip it.
+2. Open your extensions page: `chrome://extensions` (Chrome) or
+   `edge://extensions` (Edge).
+3. Turn on **Developer mode**.
+4. Click **Load unpacked** and select the **`extension/`** folder.
+5. Click the TabSage toolbar icon to open the side panel.
+
+### First run
+
+1. Open **Settings** (gear icon), paste your provider key, click **Save**.
+2. Open a study page (a docs page or tutorial), then click **+ (Add this tab)**.
+3. Ask a question — you get an answer built only from your added tabs, with
+   citations, streamed as it's written.
+
+> The extension talks to the hosted TabSage backend over HTTPS. To run your own
+> backend, deploy `backend/` (see the backend quickstart above) and set the
+> `prod` URL in `extension/config.js`.
+
 ## Status
 
-Phase 0 — platform & environment setup.
+v1.0.0 — backend live over HTTPS (FastAPI on AWS); extension packaged for Edge
+Add-ons / Chrome Web Store. BYOK, streaming answers, source-grounded with
+citations.

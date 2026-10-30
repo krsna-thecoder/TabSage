@@ -92,11 +92,12 @@ export async function resetSessionId() {
 }
 
 /**
- * A stable, anonymous client token used by the backend to attribute and
- * throttle requests per client (Phase 9 abuse protection). Unlike the session
- * id, it is NOT rotated on reset — so throttling can't be dodged by resetting —
- * and it is not a secret: it identifies a browser install, not the user.
- * Generated lazily on first use.
+ * A stable, random installation identifier used by the backend to attribute and
+ * throttle requests per client (Phase 9 abuse protection). It identifies this
+ * browser installation and can link that installation's requests; it is not a
+ * secret and is not tied to your personal identity. Unlike the session id, it is
+ * NOT rotated on reset — so throttling can't be dodged by resetting. Generated
+ * lazily on first use.
  */
 export async function getClientToken() {
   const data = await chrome.storage.local.get(STORAGE_KEYS.clientToken);
@@ -127,4 +128,15 @@ export async function addSource(source) {
 /** Drop the whole source list (on reset / provider switch). */
 export async function clearSources() {
   await chrome.storage.local.remove(STORAGE_KEYS.sources);
+}
+
+/** Whether the user has acknowledged the first-use privacy notice. */
+export async function getPrivacyAccepted() {
+  const data = await chrome.storage.local.get(STORAGE_KEYS.privacyAccepted);
+  return Boolean(data[STORAGE_KEYS.privacyAccepted]);
+}
+
+/** Record that the user acknowledged the first-use privacy notice. */
+export async function setPrivacyAccepted() {
+  await chrome.storage.local.set({ [STORAGE_KEYS.privacyAccepted]: true });
 }

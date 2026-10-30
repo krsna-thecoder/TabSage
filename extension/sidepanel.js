@@ -7,8 +7,13 @@
  * citations. Settings state (provider + whether a key exists) and the source
  * list are read reactively from chrome.storage.local.
  */
-import { PROVIDERS, STORAGE_KEYS } from "./config.js";
-import { getSettings, getSources } from "./storage.js";
+import { PRIVACY_POLICY_URL, PROVIDERS, STORAGE_KEYS } from "./config.js";
+import {
+  getPrivacyAccepted,
+  getSettings,
+  getSources,
+  setPrivacyAccepted,
+} from "./storage.js";
 import { attachThemeMenu, initTheme } from "./theme.js";
 
 const el = {
@@ -28,6 +33,11 @@ const el = {
   addKeyButton: document.getElementById("addKeyButton"),
   themeButton: document.getElementById("themeButton"),
   themeMenu: document.getElementById("themeMenu"),
+  consentOverlay: document.getElementById("consentOverlay"),
+  consentAccept: document.getElementById("consentAccept"),
+  consentCancel: document.getElementById("consentCancel"),
+  consentPolicyLink: document.getElementById("consentPolicyLink"),
+  privacyLink: document.getElementById("privacyLink"),
 };
 
 let hasKey = false;
@@ -37,6 +47,15 @@ let busy = false;
 
 function openSettings() {
   chrome.runtime.openOptionsPage();
+}
+
+function showConsent() {
+  el.consentOverlay.classList.remove("hidden");
+  el.consentAccept.focus();
+}
+
+function hideConsent() {
+  el.consentOverlay.classList.add("hidden");
 }
 
 /** Send a message to the service worker and unwrap its {ok,...} envelope. */
@@ -233,6 +252,19 @@ function renderMarkdown(raw) {
   return out.join("");
 }
 
+function renderStreaming(node, text) {
+  node.className = "msg msg-assistant";
+  let body = node.querySelector(".answer-text");
+  if (!body) {
+    node.replaceChildren(); // drop the typing dots on first token
+    body = document.createElement("div");
+    body.className = "answer-text";
+    node.appendChild(body);
+  }
+  body.innerHTML = renderMarkdown(text);
+  scrollToBottom();
+}
+
 function renderAnswer(node, { answer, citations, grounded }) {
   node.className = "msg msg-assistant";
   node.replaceChildren();
@@ -285,6 +317,11 @@ function renderError(node, text) {
 // ── actions ─────────────────────────────────────────────────────────────────
 async function addCurrentTab() {
   if (busy || !hasKey) return;
+  // First-use privacy notice — gate the very first ingest until acknowledged.
+  if (!(await getPrivacyAccepted())) {
+    showConsent();
+    return;
+  }
   busy = true;
   renderShell();
 
@@ -314,20 +351,59 @@ async function ask() {
   renderShell();
 
   const pending = addPendingAssistant();
-  try {
-    const res = await sendToWorker({ type: "chat", question });
-    renderAnswer(pending, {
-      answer: res.answer,
-      citations: res.citations,
-      grounded: res.grounded,
-    });
-  } catch (err) {
-    renderError(pending, err.message || String(err));
-  } finally {
+
+  let acc = "";
+  let settled = false;
+  const finish = () => {
+    if (settled) return;
+    settled = true;
     busy = false;
     renderShell();
     el.askInput.focus();
+  };
+
+  let port;
+  try {
+    port = chrome.runtime.connect({ name: "chat-stream" });
+  } catch {
+    renderError(pending, "Can't reach the TabSage service worker.");
+    finish();
+    return;
   }
+
+  port.onMessage.addListener((msg) => {
+    if (!msg) return;
+    if (msg.type === "delta") {
+      acc += msg.text || "";
+      renderStreaming(pending, acc);
+    } else if (msg.type === "done") {
+      renderAnswer(pending, {
+        answer: acc,
+        citations: msg.citations,
+        grounded: msg.grounded,
+      });
+      try { port.disconnect(); } catch { /* already closed */ }
+      finish();
+    } else if (msg.type === "error") {
+      renderError(pending, msg.error || "Something went wrong.");
+      try { port.disconnect(); } catch { /* already closed */ }
+      finish();
+    } else if (msg.type === "end" && !settled) {
+      // stream closed without a done event — settle with whatever we have
+      if (acc) renderAnswer(pending, { answer: acc, citations: [], grounded: true });
+      else renderError(pending, "No response from the backend.");
+      finish();
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    if (settled) return;
+    if (acc) renderAnswer(pending, { answer: acc, citations: [], grounded: true });
+    else renderError(pending, "The connection closed unexpectedly.");
+    finish();
+  });
+
+  port.postMessage({ type: "chat", question });
 }
 
 async function resetSession() {
@@ -360,6 +436,8 @@ async function refreshSettings() {
 async function start() {
   await initTheme();
   attachThemeMenu(el.themeButton, el.themeMenu);
+  el.consentPolicyLink.href = PRIVACY_POLICY_URL;
+  el.privacyLink.href = PRIVACY_POLICY_URL;
   await refreshSettings();
   sources = await getSources();
   renderSources();
@@ -371,6 +449,16 @@ el.addKeyButton.addEventListener("click", openSettings);
 el.addTabButton.addEventListener("click", addCurrentTab);
 el.sendButton.addEventListener("click", ask);
 el.resetButton.addEventListener("click", resetSession);
+
+el.consentAccept.addEventListener("click", async () => {
+  await setPrivacyAccepted();
+  hideConsent();
+  addCurrentTab(); // continue the add the user started
+});
+el.consentCancel.addEventListener("click", hideConsent);
+el.consentOverlay.addEventListener("click", (event) => {
+  if (event.target === el.consentOverlay) hideConsent();
+});
 el.askInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();

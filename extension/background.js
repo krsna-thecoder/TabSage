@@ -38,10 +38,31 @@ class BackendError extends Error {
   }
 }
 
+// Build a friendly message from a non-OK backend response. Shared by the
+// request and streaming paths so the {detail} extraction + Retry-After hint
+// can't diverge.
+async function describeBackendError(resp) {
+  let detail = `The backend returned an error (${resp.status}).`;
+  try {
+    const data = await resp.json();
+    if (data && data.detail) {
+      detail =
+        typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
+    }
+  } catch {
+    // Non-JSON error body — keep the generic message.
+  }
+  if (resp.status === 429) {
+    const retryAfter = resp.headers.get("Retry-After");
+    if (retryAfter) detail += ` (retry in ~${retryAfter}s)`;
+  }
+  return detail;
+}
+
 async function callBackend(path, { method = "POST", body, key } = {}) {
   const headers = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  // Anonymous client token for per-client rate limiting (never a secret).
+  // Random per-install id for per-client rate limiting (not a secret).
   headers["X-Client-Token"] = await getClientToken();
   // The key travels only here, worker → backend. Never to a page.
   if (key) headers["X-Provider-Key"] = key;
@@ -62,24 +83,7 @@ async function callBackend(path, { method = "POST", body, key } = {}) {
   }
 
   if (!resp.ok) {
-    let detail = `The backend returned an error (${resp.status}).`;
-    try {
-      const data = await resp.json();
-      if (data && data.detail) {
-        detail =
-          typeof data.detail === "string"
-            ? data.detail
-            : JSON.stringify(data.detail);
-      }
-    } catch {
-      // Non-JSON error body — keep the generic message.
-    }
-    // On a throttle, fold the server's Retry-After hint into the message.
-    if (resp.status === 429) {
-      const retryAfter = resp.headers.get("Retry-After");
-      if (retryAfter) detail += ` (retry in ~${retryAfter}s)`;
-    }
-    throw new BackendError(detail, resp.status);
+    throw new BackendError(await describeBackendError(resp), resp.status);
   }
   return resp.json();
 }
@@ -222,6 +226,125 @@ async function resetSession() {
   return { sessionId, chunksRemoved };
 }
 
+// ── streaming chat (Server-Sent Events relayed over a port) ──────────────────
+// The side panel opens a "chat-stream" port and posts {type:"chat", question}.
+// We fetch /chat/stream, read the SSE body, and relay each event to the panel:
+//   {type:"delta", text}  → append tokens
+//   {type:"done", citations, grounded} → finalize
+//   {type:"error", error, status} → show error
+// The key travels only here (worker → backend), never to the panel.
+async function streamChat(question, sourceTabIds, port) {
+  const q = (question || "").trim();
+
+  // Abort the upstream request if the panel disconnects mid-stream, so the
+  // backend stops generating tokens (and spending the user's provider quota)
+  // for an answer nobody is reading. Aborting also unblocks reader.read().
+  const controller = new AbortController();
+  let closed = false;
+  port.onDisconnect.addListener(() => {
+    closed = true;
+    controller.abort();
+  });
+  const post = (msg) => {
+    if (closed) return;
+    try {
+      port.postMessage(msg);
+    } catch {
+      // port already closed
+    }
+  };
+
+  if (!q) {
+    post({ type: "error", error: "Ask a question first." });
+    return;
+  }
+
+  const { provider, apiKey, hasKey } = await getSettings();
+  if (!hasKey) {
+    post({
+      type: "error",
+      error: "No API key set. Add your provider key in Settings first.",
+      status: 401,
+    });
+    return;
+  }
+
+  const session_id = await getSessionId();
+  const body = { question: q, session_id, provider };
+  if (Array.isArray(sourceTabIds) && sourceTabIds.length) {
+    body.source_tab_ids = sourceTabIds;
+  }
+
+  let resp;
+  try {
+    resp = await fetch(`${API_BASE_URL}/chat/stream`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Client-Token": await getClientToken(),
+        "X-Provider-Key": apiKey,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    if (err?.name === "AbortError") return; // panel closed before we connected
+    post({
+      type: "error",
+      error: "Can't reach the TabSage backend. Make sure it's running, then try again.",
+      status: 0,
+    });
+    return;
+  }
+
+  // Errors that happen before streaming starts come back as a normal JSON body.
+  if (!resp.ok) {
+    post({ type: "error", error: await describeBackendError(resp), status: resp.status });
+    return;
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep;
+      while ((sep = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, sep).trim();
+        buffer = buffer.slice(sep + 2);
+        if (!frame.startsWith("data:")) continue;
+        const payload = frame.slice(5).trim();
+        if (!payload) continue;
+        let evt;
+        try {
+          evt = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+        if (evt.type === "error") {
+          post({
+            type: "error",
+            error: evt.detail || "Something went wrong.",
+            status: evt.status ?? null,
+          });
+        } else {
+          post(evt); // delta | done
+        }
+      }
+    }
+  } catch (err) {
+    // AbortError = panel closed; exit quietly. Anything else is a real break.
+    if (err?.name !== "AbortError") {
+      post({ type: "error", error: "The answer stream was interrupted.", status: 0 });
+    }
+    return;
+  }
+  post({ type: "end" });
+}
+
 // ── message router ────────────────────────────────────────────────────────
 const HANDLERS = {
   ingestActiveTab: () => ingestActiveTab(),
@@ -243,4 +366,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }),
     );
   return true; // keep the channel open for the async response
+});
+
+// Streaming chat uses a long-lived port so the worker can push many events.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "chat-stream") return;
+  port.onMessage.addListener((message) => {
+    if (!message || message.type !== "chat") return;
+    streamChat(message.question, message.sourceTabIds, port).catch((err) => {
+      try {
+        port.postMessage({
+          type: "error",
+          error: err?.message || String(err),
+          status: err?.status ?? null,
+        });
+      } catch {
+        // port already closed
+      }
+    });
+  });
 });

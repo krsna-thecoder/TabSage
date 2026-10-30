@@ -109,7 +109,9 @@ async def lifespan(app: FastAPI):
     # Surface the resolved CORS allowlist — the most common post-deploy gotcha
     # (the extension's chrome-extension://<id> origin must be present). Safe to
     # log: origins are not secrets.
-    logger.info("CORS allowed origins: %s", settings.allowed_origins_list)
+    logger.info("CORS allowed origins: %s (regex: %s)",
+                settings.allowed_origins_list,
+                settings.allowed_origin_regex or "none")
     task = asyncio.create_task(_purge_loop())
     try:
         yield
@@ -137,6 +139,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
+    allow_origin_regex=settings.allowed_origin_regex or None,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-Provider-Key", "X-Client-Token"],
