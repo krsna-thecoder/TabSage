@@ -1,14 +1,24 @@
-"""TabSage FastAPI application — API endpoints (Phase 6).
+"""TabSage FastAPI application — API endpoints + production hardening.
 
 Stateless about secrets: holds no provider key. The user's key travels per
 request in the `X-Provider-Key` header and is used transiently to build a
 provider, then discarded. The session vector store is process-local + ephemeral.
+
+Phase 9 adds the production surface around those endpoints:
+  * a background job that sweeps idle sessions out of the ephemeral store;
+  * per-client / per-session rate limiting (ratelimit.py);
+  * access logging that records method/path/status/latency only — never the
+    request headers or bodies, which carry the key and raw page text.
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import logging
+import time
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
@@ -23,6 +33,7 @@ from providers.base import (
     ProviderTimeout,
     ProviderUnavailable,
 )
+from ratelimit import enforce_client_rate_limit, enforce_ingest_quota
 from rag import (
     EmbeddingModelMismatchError,
     EmptyContentError,
@@ -44,6 +55,68 @@ from schemas import (
     SessionResetResponse,
 )
 
+
+# ── logging ───────────────────────────────────────────────────────────────
+# A dedicated logger so TabSage lines are distinguishable from uvicorn's. It is
+# wired NEVER to touch headers or bodies (see `log_requests` below).
+logger = logging.getLogger("tabsage")
+
+
+def _configure_logging() -> None:
+    level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    logger.setLevel(level)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s tabsage %(message)s")
+        )
+        logger.addHandler(handler)
+        logger.propagate = False
+
+
+_configure_logging()
+
+# Process-wide, ephemeral vector store shared across requests.
+store = get_store()
+
+
+# ── lifespan: background idle-session sweeper ─────────────────────────────────
+async def _purge_loop() -> None:
+    """Periodically drop sessions idle longer than the TTL (auto-expiry job).
+
+    Keeps the ephemeral in-memory store bounded without persisting anything.
+    Runs on `settings.purge_interval_seconds`; errors are logged and the loop
+    continues so one bad cycle can't kill the sweeper.
+    """
+    while True:
+        try:
+            await asyncio.sleep(settings.purge_interval_seconds)
+            purged = await asyncio.to_thread(store.purge_expired)
+            if purged:
+                logger.info("Purged %d idle session(s).", len(purged))
+        except asyncio.CancelledError:
+            break
+        except Exception:  # noqa: BLE001 - never let the sweeper die silently
+            logger.exception("Session purge cycle failed; continuing.")
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("TabSage API starting (env=%s).", settings.env)
+    # Surface the resolved CORS allowlist — the most common post-deploy gotcha
+    # (the extension's chrome-extension://<id> origin must be present). Safe to
+    # log: origins are not secrets.
+    logger.info("CORS allowed origins: %s", settings.allowed_origins_list)
+    task = asyncio.create_task(_purge_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        logger.info("TabSage API shutting down.")
+
+
 app = FastAPI(
     title="TabSage API",
     version="0.1.0",
@@ -51,20 +124,43 @@ app = FastAPI(
         "Study-from-your-tabs RAG backend. BYOK: send your provider key in the "
         "`X-Provider-Key` header. The backend never stores or logs it."
     ),
+    lifespan=lifespan,
 )
 
 # Restricted CORS — NEVER "*". Allowlist comes from settings (localhost in dev;
 # the chrome-extension://<id> origin is added in Phase 7 once the id is known).
+# Added FIRST so it sits inside the access-log middleware and still attaches
+# CORS headers to error responses (e.g. a 429), which the extension must read.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "X-Provider-Key"],
+    allow_headers=["Content-Type", "X-Provider-Key", "X-Client-Token"],
 )
 
-# Process-wide, ephemeral vector store shared across requests.
-store = get_store()
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Structured access log — method, path, status, latency only.
+
+    Deliberately reads NOTHING from headers or the body: the provider key lives
+    in `X-Provider-Key` and raw page text in the JSON body, and neither may ever
+    be logged (Section 10). The peer IP is included for abuse monitoring.
+    """
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - start) * 1000.0
+    client = request.client.host if request.client else "-"
+    logger.info(
+        "%s %s -> %d (%.1f ms) client=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+        client,
+    )
+    return response
 
 
 # ── error mapping ─────────────────────────────────────────────────────────
@@ -100,12 +196,21 @@ async def health() -> HealthResponse:
 # Defined as sync `def` so FastAPI runs the blocking provider/store calls in a
 # threadpool instead of stalling the event loop.
 
-@app.post("/ingest", response_model=IngestResponse, tags=["rag"])
+@app.post(
+    "/ingest",
+    response_model=IngestResponse,
+    tags=["rag"],
+    dependencies=[Depends(enforce_client_rate_limit)],
+)
 def ingest(
     body: IngestRequest,
     provider_key: Annotated[str, Depends(get_provider_key)],
 ) -> IngestResponse:
     """Clean → chunk → embed → store one tab's text. Returns chunks indexed."""
+    # Per-session ingest cap: bound how fast one session writes to the store
+    # (the main storage/compute cost surface), on top of the per-client limit.
+    enforce_ingest_quota(body.session_id)
+
     try:
         provider = get_provider(body.provider, provider_key)
     except ProviderError as exc:
@@ -156,7 +261,12 @@ def ingest(
     )
 
 
-@app.post("/chat", response_model=ChatResponse, tags=["rag"])
+@app.post(
+    "/chat",
+    response_model=ChatResponse,
+    tags=["rag"],
+    dependencies=[Depends(enforce_client_rate_limit)],
+)
 def chat(
     body: ChatRequest,
     provider_key: Annotated[str, Depends(get_provider_key)],
@@ -193,7 +303,12 @@ def chat(
     )
 
 
-@app.post("/sessions/reset", response_model=SessionResetResponse, tags=["rag"])
+@app.post(
+    "/sessions/reset",
+    response_model=SessionResetResponse,
+    tags=["rag"],
+    dependencies=[Depends(enforce_client_rate_limit)],
+)
 def reset_session(body: SessionResetRequest) -> SessionResetResponse:
     """Delete a session's indexed content (also used when switching providers).
 

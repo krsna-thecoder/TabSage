@@ -1,0 +1,27 @@
+# Keep the production image small and secret-free.
+
+# Virtualenvs / caches
+.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets + local config (NEVER ship these; operators set env at deploy time)
+.env
+
+# Dev-only: tests, manual smoke scripts, local vector data
+tests/
+scripts/
+chroma_db/
+*.sqlite3
+
+# Docs / notes
+*.md
+
+# VCS / editor
+.git/
+.gitignore
+.vscode/
+.idea/

@@ -11,6 +11,20 @@ from rag import ChromaVectorStore
 from ._fakes import FakeProvider, fake_factory
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiters():
+    """Clear the process-wide rate limiters around every test.
+
+    The limiters are module singletons; without this, counts would bleed across
+    tests (all sharing the TestClient peer) and could trip the per-client cap.
+    """
+    import ratelimit
+
+    ratelimit.reset_rate_limiters()
+    yield
+    ratelimit.reset_rate_limiters()
+
+
 @pytest.fixture
 def store() -> ChromaVectorStore:
     """A fresh, isolated in-memory Chroma store per test."""

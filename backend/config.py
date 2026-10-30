@@ -32,11 +32,28 @@ class Settings(BaseSettings):
     # Ephemeral session store TTL (seconds)
     session_ttl_seconds: int = 3600
 
-    # Payload / volume caps (Section 10 abuse limits) — enforced in later phases.
+    # How often the background job sweeps idle sessions (ephemeral-store
+    # auto-expiry). Independent of the TTL above: the sweep runs on this cadence
+    # and drops any session idle longer than `session_ttl_seconds`.
+    purge_interval_seconds: int = 300
+
+    # Payload / volume caps (Section 10 abuse limits).
     max_text_chars: int = 200_000
     max_chunks_per_ingest: int = 400
     max_sources_per_session: int = 20
     max_question_chars: int = 2_000
+
+    # Abuse protection / rate limiting (Section 10). The throttle key is the
+    # extension-issued `X-Client-Token`, falling back to the peer IP. In-memory
+    # + per-process, matching the ephemeral store; a multi-worker deployment
+    # needs a shared backend (e.g. Redis). See ratelimit.py.
+    rate_limit_window_seconds: int = 60
+    rate_limit_max_requests: int = 60  # all endpoints, per client, per window
+    max_ingests_per_window: int = 30  # per session, per window
+
+    # Logging. The access log records method/path/status/latency only — never
+    # request headers or bodies (which carry the key and raw page text).
+    log_level: str = "INFO"
 
     @property
     def allowed_origins_list(self) -> list[str]:
