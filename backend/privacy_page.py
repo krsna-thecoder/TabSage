@@ -52,8 +52,9 @@ tab,"</strong> uses <strong>your own AI provider key</strong>, and does
   <li><strong>Page title and URL</strong> — to label and link citations.</li>
   <li><strong>Your questions</strong> — the text you ask.</li>
   <li><strong>A session id</strong> — a random id grouping one study session.</li>
-  <li><strong>An anonymous client token</strong> — a random id used only to
-      rate-limit abuse; it identifies a browser install, not you.</li>
+  <li><strong>A random installation identifier</strong> — used only to
+      rate-limit abuse; it identifies this browser installation and can link
+      that installation's requests, and is not tied to your personal identity.</li>
   <li><strong>Your provider API key</strong> — see "How your API key is handled."</li>
 </ul>
 
