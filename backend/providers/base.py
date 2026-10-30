@@ -59,9 +59,9 @@ RETRYABLE: tuple[type[ProviderError], ...] = (
 def retry_with_backoff(
     fn: Callable[[], T],
     *,
-    max_attempts: int = 5,
-    base_delay: float = 1.0,
-    max_delay: float = 30.0,
+    max_attempts: int = 4,
+    base_delay: float = 0.5,
+    max_delay: float = 4.0,
     sleep: Callable[[float], None] = time.sleep,
 ) -> T:
     """Call `fn`, retrying on RETRYABLE provider errors with exponential
@@ -94,8 +94,11 @@ class BaseProvider(ABC):
 
     # Batch size for embedding calls (bounds request size + smooths rate limits).
     embed_batch_size: int = 100
-    # Retry attempts for transient provider errors.
-    max_retries: int = 5
+    # Retry attempts for transient provider errors. Kept low + short-backoff
+    # (see retry_with_backoff defaults) so a rate-limited call fails fast with a
+    # friendly 429 instead of hanging ~30s on exponential sleeps — important for
+    # chat latency.
+    max_retries: int = 4
 
     def __init__(self, api_key: str) -> None:
         key = (api_key or "").strip()

@@ -27,7 +27,11 @@ from .base import (
 # Free-tier-friendly defaults. Adjust here if Google changes model availability.
 # (Verify against `python scripts/list_models.py` for a given key.)
 GEMINI_EMBEDDING_MODEL = "gemini-embedding-001"
-GEMINI_GENERATION_MODEL = "gemini-3.6-flash"
+# flash-LITE: purpose-built for low latency — the right pick for grounded RAG
+# answers (we're extracting from provided context, not doing open-ended
+# reasoning). Swap to a fuller model (e.g. "gemini-3.8-flash") if you want more
+# answer quality at the cost of speed.
+GEMINI_GENERATION_MODEL = "gemini-3.5-flash-lite"
 
 # Reduced embedding size (Matryoshka). gemini-embedding-001 defaults to 3072
 # dimensions; 768 keeps strong retrieval quality while cutting the embedding
@@ -62,6 +66,15 @@ class GeminiProvider(BaseProvider):
     embedding_model = GEMINI_EMBEDDING_MODEL
     generation_model = GEMINI_GENERATION_MODEL
     embedding_dim = GEMINI_EMBEDDING_DIM
+
+    # Cap the answer length. Study answers rarely need more, and a smaller cap
+    # means the model stops generating sooner → lower latency.
+    max_output_tokens = 800
+
+    # Disable "thinking" — the biggest latency win. Flash/flash-lite 2.5+ accept
+    # thinking_budget=0 to answer immediately instead of reasoning first. If a
+    # future model rejects this field (400), set it back to None.
+    thinking_budget: int | None = 0
 
     @property
     def embedding_model_id(self) -> str:
@@ -100,12 +113,19 @@ class GeminiProvider(BaseProvider):
 
     def generate(self, prompt: str) -> str:
         # We do not use tool/function calling, so disable AFC to avoid its
-        # noisy "not recommended" warning and any extra round-trips.
-        config = genai_types.GenerateContentConfig(
-            automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(
+        # noisy "not recommended" warning and any extra round-trips. Cap the
+        # output length and (optionally) disable thinking to cut latency.
+        cfg_kwargs: dict = {
+            "automatic_function_calling": genai_types.AutomaticFunctionCallingConfig(
                 disable=True
+            ),
+            "max_output_tokens": self.max_output_tokens,
+        }
+        if self.thinking_budget is not None:
+            cfg_kwargs["thinking_config"] = genai_types.ThinkingConfig(
+                thinking_budget=self.thinking_budget
             )
-        )
+        config = genai_types.GenerateContentConfig(**cfg_kwargs)
 
         def call() -> str:
             try:

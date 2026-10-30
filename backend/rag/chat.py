@@ -101,6 +101,7 @@ def build_prompt(question: str, hits: list[Retrieved]) -> str:
         "You are TabSage, a study assistant. Answer the QUESTION using ONLY the "
         "information in the SOURCES below. Do not use any outside knowledge and "
         "do not guess.\n"
+        "Keep the answer concise and direct — a few sentences at most.\n"
         f'If the SOURCES do not contain the answer, reply with exactly this '
         f'sentence and nothing else:\n"{NOT_IN_TABS}"\n'
         "When you use a source, cite it inline with its bracket number, e.g. [1].\n\n"
