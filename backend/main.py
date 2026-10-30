@@ -14,13 +14,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import time
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 
 from config import settings
 from deps import get_provider_key
@@ -39,6 +40,7 @@ from rag import (
     EmptyContentError,
     PayloadTooLargeError,
     answer_question,
+    answer_question_stream,
     describe_provider_error,
     embed_and_store,
     get_store,
@@ -300,6 +302,81 @@ def chat(
     ]
     return ChatResponse(
         answer=result.answer, citations=citations, grounded=result.grounded
+    )
+
+
+def _sse(obj: dict) -> str:
+    """Encode one Server-Sent Event line."""
+    return f"data: {json.dumps(obj)}\n\n"
+
+
+@app.post(
+    "/chat/stream",
+    tags=["rag"],
+    dependencies=[Depends(enforce_client_rate_limit)],
+)
+def chat_stream(
+    body: ChatRequest,
+    provider_key: Annotated[str, Depends(get_provider_key)],
+) -> StreamingResponse:
+    """Streaming /chat: emits SSE `delta` events as the answer is produced, then
+    a final `done` event with citations + the grounded flag.
+
+    Because the HTTP 200 + headers are sent before generation runs, errors that
+    occur mid-stream are delivered as an `error` event (with the status code the
+    non-streaming endpoint would have returned) rather than an HTTP error.
+    """
+    try:
+        provider = get_provider(body.provider, provider_key)
+    except ProviderError as exc:
+        raise _provider_http_error(exc)
+
+    def event_gen():
+        try:
+            for kind, payload in answer_question_stream(
+                store,
+                provider,
+                body.session_id,
+                body.question,
+                source_tab_ids=body.source_tab_ids,
+            ):
+                if kind == "delta":
+                    yield _sse({"type": "delta", "text": payload})
+                else:  # ("done", ChatResult)
+                    result = payload
+                    citations = [
+                        {
+                            "tab_id": c.tab_id,
+                            "title": c.title,
+                            "url": c.url,
+                            "snippet": c.snippet,
+                        }
+                        for c in result.citations
+                    ]
+                    yield _sse(
+                        {
+                            "type": "done",
+                            "citations": citations,
+                            "grounded": result.grounded,
+                        }
+                    )
+        except EmbeddingModelMismatchError as exc:
+            yield _sse({"type": "error", "status": 409, "detail": str(exc)})
+        except ProviderError as exc:
+            yield _sse(
+                {
+                    "type": "error",
+                    "status": _PROVIDER_STATUS.get(type(exc), status.HTTP_502_BAD_GATEWAY),
+                    "detail": describe_provider_error(exc),
+                }
+            )
+        except ValueError as exc:
+            yield _sse({"type": "error", "status": 422, "detail": str(exc)})
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

@@ -7,7 +7,7 @@ which is unsafe when concurrent requests carry different users' keys.
 """
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 
 from google import genai
 from google.genai import errors as genai_errors
@@ -67,9 +67,9 @@ class GeminiProvider(BaseProvider):
     generation_model = GEMINI_GENERATION_MODEL
     embedding_dim = GEMINI_EMBEDDING_DIM
 
-    # Cap the answer length. Study answers rarely need more, and a smaller cap
-    # means the model stops generating sooner → lower latency.
-    max_output_tokens = 800
+    # Cap the answer length so a runaway generation can't stall the response,
+    # but high enough to allow a detailed, well-formatted answer with examples.
+    max_output_tokens = 2048
 
     # "thinking" disable. Sending thinking_budget=0 is the biggest latency win
     # on models that accept it, but some models reject the field (HTTP 400
@@ -113,7 +113,7 @@ class GeminiProvider(BaseProvider):
             out.extend(retry_with_backoff(call, max_attempts=self.max_retries))
         return out
 
-    def generate(self, prompt: str) -> str:
+    def _gen_config(self) -> genai_types.GenerateContentConfig:
         # We do not use tool/function calling, so disable AFC to avoid its
         # noisy "not recommended" warning and any extra round-trips. Cap the
         # output length and (optionally) disable thinking to cut latency.
@@ -127,7 +127,10 @@ class GeminiProvider(BaseProvider):
             cfg_kwargs["thinking_config"] = genai_types.ThinkingConfig(
                 thinking_budget=self.thinking_budget
             )
-        config = genai_types.GenerateContentConfig(**cfg_kwargs)
+        return genai_types.GenerateContentConfig(**cfg_kwargs)
+
+    def generate(self, prompt: str) -> str:
+        config = self._gen_config()
 
         def call() -> str:
             try:
@@ -139,3 +142,19 @@ class GeminiProvider(BaseProvider):
                 raise _map_error(exc) from exc
 
         return retry_with_backoff(call, max_attempts=self.max_retries)
+
+    def generate_stream(self, prompt: str) -> Iterator[str]:
+        # Streaming path: yield text as the model produces it. No retry here —
+        # once bytes start flowing we can't cleanly restart — so errors surface
+        # immediately and the API layer turns them into a stream 'error' event.
+        config = self._gen_config()
+        try:
+            stream = self._client.models.generate_content_stream(
+                model=self.generation_model, contents=prompt, config=config
+            )
+            for chunk in stream:
+                text = getattr(chunk, "text", None)
+                if text:
+                    yield text
+        except Exception as exc:  # noqa: BLE001 - normalized below
+            raise _map_error(exc) from exc

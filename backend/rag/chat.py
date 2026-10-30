@@ -28,6 +28,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from collections.abc import Iterator
+
 from providers.base import (
     BaseProvider,
     ProviderAuthError,
@@ -99,9 +101,15 @@ def build_prompt(question: str, hits: list[Retrieved]) -> str:
 
     return (
         "You are TabSage, a study assistant. Answer the QUESTION using ONLY the "
-        "information in the SOURCES below. Do not use any outside knowledge and "
-        "do not guess.\n"
-        "Keep the answer concise and direct — a few sentences at most.\n"
+        "information in the SOURCES below. Do not use outside knowledge and do "
+        "not guess.\n"
+        "Write a clear, complete answer and include relevant examples or code "
+        "from the SOURCES when they aid understanding. Match the depth to the "
+        "question: brief for simple questions, fuller and more detailed when the "
+        "user asks for detail or an explanation.\n"
+        "Format the answer in Markdown so it is easy to read: use short "
+        "paragraphs, bullet or numbered lists for multiple points, **bold** for "
+        "key terms, and fenced ```code``` blocks for any code or syntax.\n"
         f'If the SOURCES do not contain the answer, reply with exactly this '
         f'sentence and nothing else:\n"{NOT_IN_TABS}"\n'
         "When you use a source, cite it inline with its bracket number, e.g. [1].\n\n"
@@ -181,6 +189,70 @@ def answer_question(
         citations=_citations(hits),
         grounded=True,
         chunk_count=len(hits),
+    )
+
+
+def answer_question_stream(
+    store: VectorStore,
+    provider: BaseProvider,
+    session_id: str,
+    question: str,
+    *,
+    top_k: int = DEFAULT_TOP_K,
+    source_tab_ids: list[str] | None = None,
+) -> Iterator[tuple[str, object]]:
+    """Streaming variant of `answer_question`.
+
+    Yields ``("delta", text)`` pairs as the answer is produced, then a final
+    ``("done", ChatResult)`` carrying citations + the grounded flag. The honest
+    refusals work the same: no retrieval yields the refusal line then done
+    (grounded False) without a generate call; if the model streams the refusal
+    sentence, the final done drops citations. Errors propagate so the API layer
+    can emit a stream 'error' event.
+    """
+    q = (question or "").strip()
+    if not q:
+        raise ValueError("Question must not be empty.")
+
+    q_vec = embed_query(provider, q)
+    hits = store.query(
+        session_id,
+        q_vec,
+        provider.embedding_model_id,
+        top_k=top_k,
+        source_tab_ids=source_tab_ids,
+    )
+
+    # Honest refusal #1: nothing retrieved → emit the line, skip generation.
+    if not hits:
+        yield ("delta", NOT_IN_TABS)
+        yield ("done", ChatResult(answer=NOT_IN_TABS, citations=[], grounded=False))
+        return
+
+    prompt = build_prompt(q, hits)
+    parts: list[str] = []
+    for piece in provider.generate_stream(prompt):
+        if piece:
+            parts.append(piece)
+            yield ("delta", piece)
+    answer = ("".join(parts)).strip()
+
+    # Honest refusal #2: empty output or the model emitted the refusal line.
+    if not answer or _norm(answer) == _norm(NOT_IN_TABS):
+        yield (
+            "done",
+            ChatResult(answer=NOT_IN_TABS, citations=[], grounded=False, chunk_count=len(hits)),
+        )
+        return
+
+    yield (
+        "done",
+        ChatResult(
+            answer=answer,
+            citations=_citations(hits),
+            grounded=True,
+            chunk_count=len(hits),
+        ),
     )
 
 

@@ -25,6 +25,7 @@ from .chat import (
     Citation,
     ChatResult,
     answer_question,
+    answer_question_stream,
     build_prompt,
     describe_provider_error,
 )
@@ -71,6 +72,7 @@ __all__ = [
     "EmbeddingModelMismatchError",
     # Phase 5 — retrieve & generate
     "answer_question",
+    "answer_question_stream",
     "build_prompt",
     "Citation",
     "ChatResult",

@@ -13,7 +13,7 @@ from __future__ import annotations
 import random
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from typing import TypeVar
 
 T = TypeVar("T")
@@ -123,6 +123,15 @@ class BaseProvider(ABC):
     @abstractmethod
     def generate(self, prompt: str) -> str:
         """Return the model's text completion for `prompt`."""
+
+    def generate_stream(self, prompt: str) -> Iterator[str]:
+        """Yield the completion in pieces as they are produced.
+
+        Default is non-streaming: yields the whole `generate` result as one
+        piece. Providers with server-side streaming (e.g. Gemini) override this
+        to yield tokens as they arrive, so the UI can render immediately.
+        """
+        yield self.generate(prompt)
 
     def __repr__(self) -> str:  # never expose the key
         return (
