@@ -1,0 +1,12 @@
+# Caddy reverse proxy for the TabSage backend (EC2 deploy).
+#
+# Replace `tabsage.duckdns.org` with YOUR DuckDNS subdomain. Caddy then
+# automatically obtains and renews a free Let's Encrypt HTTPS certificate for
+# that name (needs ports 80 + 443 open and the domain pointing at this server).
+#
+# `tabsage` is the app container's name on the shared Docker network; it listens
+# on 8000 inside the network (never exposed to the public directly — Caddy is
+# the only thing on 80/443).
+tabsage.duckdns.org {
+    reverse_proxy tabsage:8000
+}

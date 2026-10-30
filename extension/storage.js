@@ -91,6 +91,23 @@ export async function resetSessionId() {
   return id;
 }
 
+/**
+ * A stable, anonymous client token used by the backend to attribute and
+ * throttle requests per client (Phase 9 abuse protection). Unlike the session
+ * id, it is NOT rotated on reset — so throttling can't be dodged by resetting —
+ * and it is not a secret: it identifies a browser install, not the user.
+ * Generated lazily on first use.
+ */
+export async function getClientToken() {
+  const data = await chrome.storage.local.get(STORAGE_KEYS.clientToken);
+  let token = data[STORAGE_KEYS.clientToken];
+  if (!token) {
+    token = crypto.randomUUID();
+    await chrome.storage.local.set({ [STORAGE_KEYS.clientToken]: token });
+  }
+  return token;
+}
+
 /** The added-tab list for the current session (display only; never secret). */
 export async function getSources() {
   const data = await chrome.storage.local.get(STORAGE_KEYS.sources);

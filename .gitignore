@@ -33,3 +33,11 @@ Thumbs.db
 
 # ── Local scratch / manual test notes (not for the repo) ──────
 test.txt
+
+# ── Personal build/process notes (kept local, NOT pushed) ─────
+# Understanding/checklist/verification/deploy docs — local only.
+# (README.md, DOCUMENTATION.md, extension/README.md stay tracked.)
+CHECKLIST.md
+PHASE8_VERIFY.md
+PHASE9_VERIFY.md
+DEPLOY.md

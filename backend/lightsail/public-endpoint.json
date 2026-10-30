@@ -1,0 +1,12 @@
+{
+  "containerName": "tabsage",
+  "containerPort": 8000,
+  "healthCheck": {
+    "path": "/health",
+    "successCodes": "200",
+    "intervalSeconds": 30,
+    "timeoutSeconds": 5,
+    "healthyThreshold": 2,
+    "unhealthyThreshold": 3
+  }
+}

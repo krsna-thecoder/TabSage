@@ -16,6 +16,7 @@ import { API_BASE_URL } from "./config.js";
 import {
   addSource,
   clearSources,
+  getClientToken,
   getSessionId,
   getSettings,
   resetSessionId,
@@ -40,6 +41,8 @@ class BackendError extends Error {
 async function callBackend(path, { method = "POST", body, key } = {}) {
   const headers = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  // Anonymous client token for per-client rate limiting (never a secret).
+  headers["X-Client-Token"] = await getClientToken();
   // The key travels only here, worker → backend. Never to a page.
   if (key) headers["X-Provider-Key"] = key;
 
@@ -70,6 +73,11 @@ async function callBackend(path, { method = "POST", body, key } = {}) {
       }
     } catch {
       // Non-JSON error body — keep the generic message.
+    }
+    // On a throttle, fold the server's Retry-After hint into the message.
+    if (resp.status === 429) {
+      const retryAfter = resp.headers.get("Retry-After");
+      if (retryAfter) detail += ` (retry in ~${retryAfter}s)`;
     }
     throw new BackendError(detail, resp.status);
   }

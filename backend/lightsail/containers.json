@@ -1,0 +1,21 @@
+{
+  "tabsage": {
+    "image": ":tabsage-backend.tabsage.REPLACE_AFTER_PUSH",
+    "ports": {
+      "8000": "HTTP"
+    },
+    "environment": {
+      "ENV": "prod",
+      "ALLOWED_ORIGINS": "chrome-extension://REPLACE_WITH_EXTENSION_ID",
+      "FORWARDED_ALLOW_IPS": "*",
+      "WEB_CONCURRENCY": "1",
+      "PORT": "8000",
+      "SESSION_TTL_SECONDS": "3600",
+      "PURGE_INTERVAL_SECONDS": "300",
+      "RATE_LIMIT_WINDOW_SECONDS": "60",
+      "RATE_LIMIT_MAX_REQUESTS": "60",
+      "MAX_INGESTS_PER_WINDOW": "30",
+      "LOG_LEVEL": "INFO"
+    }
+  }
+}

@@ -31,6 +31,7 @@ export const STORAGE_KEYS = Object.freeze({
   provider: "tabsage.provider",
   apiKey: "tabsage.apiKey",
   sessionId: "tabsage.sessionId",
+  clientToken: "tabsage.clientToken",
   sources: "tabsage.sources",
   appearance: "tabsage.appearance",
 });
