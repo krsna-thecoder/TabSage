@@ -21,10 +21,11 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from config import settings
 from deps import get_provider_key
+from privacy_page import PRIVACY_HTML
 from providers import get_provider
 from providers.base import (
     ProviderAuthError,
@@ -192,6 +193,12 @@ async def root() -> RedirectResponse:
 async def health() -> HealthResponse:
     """Deployment health check. No secrets."""
     return HealthResponse(status="ok")
+
+
+@app.get("/privacy", include_in_schema=False)
+async def privacy() -> HTMLResponse:
+    """Public privacy policy — a stable HTTPS URL for the Web Store listing."""
+    return HTMLResponse(content=PRIVACY_HTML)
 
 
 # ── RAG endpoints ───────────────────────────────────────────────────────────
