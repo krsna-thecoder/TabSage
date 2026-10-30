@@ -71,10 +71,12 @@ class GeminiProvider(BaseProvider):
     # means the model stops generating sooner → lower latency.
     max_output_tokens = 800
 
-    # Disable "thinking" — the biggest latency win. Flash/flash-lite 2.5+ accept
-    # thinking_budget=0 to answer immediately instead of reasoning first. If a
-    # future model rejects this field (400), set it back to None.
-    thinking_budget: int | None = 0
+    # "thinking" disable. Sending thinking_budget=0 is the biggest latency win
+    # on models that accept it, but some models reject the field (HTTP 400
+    # "invalid argument"). gemini-3.5-flash-lite rejects it, so leave this None
+    # (lite models barely use thinking anyway, so latency is already low). Only
+    # set 0 on a full Flash model that accepts it.
+    thinking_budget: int | None = None
 
     @property
     def embedding_model_id(self) -> str:
