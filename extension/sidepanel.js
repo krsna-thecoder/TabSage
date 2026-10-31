@@ -358,7 +358,20 @@ async function addCurrentTab() {
   renderShell();
 
   // First-use privacy notice — gate the very first ingest until acknowledged.
-  if (!(await getPrivacyAccepted())) {
+  // Reading the stored flag can reject (storage unavailable); if it does we must
+  // clear the reservation above and surface the error, or the add-tab and chat
+  // controls stay disabled until the panel reloads.
+  let accepted;
+  try {
+    accepted = await getPrivacyAccepted();
+  } catch (err) {
+    busy = false;
+    renderShell();
+    const node = addSystemMessage("");
+    renderError(node, "Couldn't check your privacy settings. Please try again.");
+    return;
+  }
+  if (!accepted) {
     busy = false;
     renderShell();
     showConsent();
