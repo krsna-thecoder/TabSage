@@ -64,7 +64,19 @@ try {
 finally {
   # Always remove the stage — including when a safety gate throws above — so a
   # staged secret never lingers in the shared temp directory.
-  Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+  #
+  # Do NOT silently swallow a failed removal: a rejected secret could remain on
+  # disk with no warning. Capture the error (keeping it non-terminating so it
+  # can't replace an in-flight gate exception) and, if the directory survives,
+  # warn loudly with the path so it can be cleaned up by hand.
+  if (Test-Path $stage) {
+    Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue -ErrorVariable removeErr
+    if ($removeErr -or (Test-Path $stage)) {
+      Write-Warning ("Failed to remove staging directory '$stage'. Delete it " +
+        "manually — it may hold files rejected by the safety gates. " +
+        ($removeErr -join '; '))
+    }
+  }
 }
 
 Write-Host "Built $zip"
