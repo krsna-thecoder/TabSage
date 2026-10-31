@@ -20,7 +20,10 @@ New-Item -ItemType Directory -Force -Path $dist | Out-Null
 if (Test-Path $zip) { Remove-Item $zip }
 
 # Stage only shippable files (preserving relative paths).
-$stage = Join-Path $env:TEMP ("tabsage-pkg-" + [guid]::NewGuid().ToString("N"))
+# Use a cross-platform temp root: $env:TEMP is Windows-only and is unset on
+# macOS/Linux (where PowerShell uses $TMPDIR or /tmp). GetTempPath() resolves
+# correctly on every OS, so Join-Path never receives a null path.
+$stage = Join-Path ([System.IO.Path]::GetTempPath()) ("tabsage-pkg-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 $excludeNames = @("README.md")
 Get-ChildItem -Path $ext -Recurse -File | Where-Object {
@@ -32,14 +35,18 @@ Get-ChildItem -Path $ext -Recurse -File | Where-Object {
   Copy-Item $_.FullName $dest
 }
 
-# Safety gate 1: no secret-like files.
+# Safety gate 1: no secret-like files. Reject every .env* variant (.env,
+# .env.local, .env.production, …), not just a bare ".env" — a leading period
+# does NOT hide a file from the archive on Windows, so any of these would ship.
 $bad = Get-ChildItem -Path $stage -Recurse -File |
-  Where-Object { $_.Name -eq ".env" -or $_.Extension -in ".pem", ".key" }
+  Where-Object { $_.Name -like ".env*" -or $_.Extension -in ".pem", ".key" }
 if ($bad) { throw "Refusing to package: secret-like file(s): $($bad.FullName -join ', ')" }
 
-# Safety gate 2: no API-key-looking strings.
+# Safety gate 2: no API-key-looking strings. Accept hyphens AND underscores in
+# the key body so OpenAI project keys (sk-proj-...) are caught — the old
+# [A-Za-z0-9] class stopped at the hyphen after "sk".
 $hits = Get-ChildItem -Path $stage -Recurse -File |
-  Select-String -Pattern "AIza[0-9A-Za-z_-]{20,}", "sk-[A-Za-z0-9]{20,}"
+  Select-String -Pattern "AIza[0-9A-Za-z_-]{20,}", "sk-[A-Za-z0-9_-]{20,}"
 if ($hits) { throw "Refusing to package: possible API key in $($hits.Path -join ', ')" }
 
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip

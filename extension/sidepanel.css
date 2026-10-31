@@ -141,6 +141,14 @@ body { height: 100%; }
 }
 .answer-text pre code { padding: 0; background: none; }
 .answer-refusal { color: var(--text-secondary); font-style: italic; }
+.answer-incomplete {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
 .msg-system {
   align-self: center;
   max-width: 90%;

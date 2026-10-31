@@ -10,7 +10,8 @@
     "sidePanel"
   ],
   "host_permissions": [
-    "https://*/*"
+    "https://*/*",
+    "http://localhost:8000/*"
   ],
   "background": {
     "service_worker": "background.js",

@@ -306,35 +306,51 @@ async function streamChat(question, sourceTabIds, port) {
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+
+  // Handle one complete SSE frame ("data: ...") — relay it to the panel.
+  const handleFrame = (raw) => {
+    const frame = raw.trim();
+    if (!frame.startsWith("data:")) return;
+    const payload = frame.slice(5).trim();
+    if (!payload) return;
+    let evt;
+    try {
+      evt = JSON.parse(payload);
+    } catch {
+      return;
+    }
+    if (evt.type === "error") {
+      post({
+        type: "error",
+        error: evt.detail || "Something went wrong.",
+        status: evt.status ?? null,
+      });
+    } else {
+      post(evt); // delta | done
+    }
+  };
+
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      let sep;
-      while ((sep = buffer.indexOf("\n\n")) !== -1) {
-        const frame = buffer.slice(0, sep).trim();
-        buffer = buffer.slice(sep + 2);
-        if (!frame.startsWith("data:")) continue;
-        const payload = frame.slice(5).trim();
-        if (!payload) continue;
-        let evt;
-        try {
-          evt = JSON.parse(payload);
-        } catch {
-          continue;
-        }
-        if (evt.type === "error") {
-          post({
-            type: "error",
-            error: evt.detail || "Something went wrong.",
-            status: evt.status ?? null,
-          });
-        } else {
-          post(evt); // delta | done
-        }
+      // Split on a CRLF-tolerant separator. The backend writes plain "\n\n"
+      // frames today, but tolerating "\r\n\r\n" means a proxy or an
+      // sse-starlette-style server that emits CRLF can't silently starve the
+      // panel of every delta/done event.
+      let m;
+      const sepRe = /\r?\n\r?\n/;
+      while ((m = sepRe.exec(buffer)) !== null) {
+        handleFrame(buffer.slice(0, m.index));
+        buffer = buffer.slice(m.index + m[0].length);
       }
     }
+    // Flush any decoder state and a trailing frame the server sent without a
+    // final blank line — otherwise the last event (usually "done", which
+    // carries the citations) would be dropped when the read loop exits.
+    buffer += decoder.decode();
+    if (buffer.trim()) handleFrame(buffer);
   } catch (err) {
     // AbortError = panel closed; exit quietly. Anything else is a real break.
     if (err?.name !== "AbortError") {

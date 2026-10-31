@@ -58,6 +58,16 @@ function hideConsent() {
   el.consentOverlay.classList.add("hidden");
 }
 
+/**
+ * Close the consent notice WITHOUT proceeding (Cancel / backdrop / dismiss) and
+ * return focus to the control that opened it, so keyboard users aren't stranded
+ * on a now-hidden button.
+ */
+function dismissConsent() {
+  hideConsent();
+  el.addTabButton.focus();
+}
+
 /** Send a message to the service worker and unwrap its {ok,...} envelope. */
 async function sendToWorker(message) {
   const res = await chrome.runtime.sendMessage(message);
@@ -314,16 +324,46 @@ function renderError(node, text) {
   scrollToBottom();
 }
 
+/**
+ * Finalize an answer that was cut off before its `done` event (stream ended or
+ * the port disconnected mid-generation). We keep whatever partial text arrived
+ * because it may still be useful, but we must NOT present it as a completed,
+ * grounded answer: it has no citations and may stop mid-sentence. So it is
+ * rendered in the non-grounded style and labelled as interrupted/incomplete.
+ */
+function renderInterrupted(node, text) {
+  node.className = "msg msg-assistant";
+  node.replaceChildren();
+
+  const body = document.createElement("div");
+  body.className = "answer-text answer-refusal";
+  body.innerHTML = renderMarkdown(text || "");
+  node.appendChild(body);
+
+  const note = document.createElement("div");
+  note.className = "answer-incomplete";
+  note.textContent =
+    "The answer was interrupted before it finished — it may be incomplete and its sources aren't available. Ask again to get a full, cited answer.";
+  node.appendChild(note);
+  scrollToBottom();
+}
+
 // ── actions ─────────────────────────────────────────────────────────────────
 async function addCurrentTab() {
   if (busy || !hasKey) return;
+  // Reserve the action BEFORE any await so two quick clicks can't both pass the
+  // busy check while getPrivacyAccepted() is in flight and double-ingest the
+  // same tab. Release it again if we have to stop and show the consent notice.
+  busy = true;
+  renderShell();
+
   // First-use privacy notice — gate the very first ingest until acknowledged.
   if (!(await getPrivacyAccepted())) {
+    busy = false;
+    renderShell();
     showConsent();
     return;
   }
-  busy = true;
-  renderShell();
 
   const pending = addSystemMessage("Reading this tab…");
   try {
@@ -389,8 +429,8 @@ async function ask() {
       try { port.disconnect(); } catch { /* already closed */ }
       finish();
     } else if (msg.type === "end" && !settled) {
-      // stream closed without a done event — settle with whatever we have
-      if (acc) renderAnswer(pending, { answer: acc, citations: [], grounded: true });
+      // Stream closed without a done event — the answer never completed.
+      if (acc) renderInterrupted(pending, acc);
       else renderError(pending, "No response from the backend.");
       finish();
     }
@@ -398,7 +438,7 @@ async function ask() {
 
   port.onDisconnect.addListener(() => {
     if (settled) return;
-    if (acc) renderAnswer(pending, { answer: acc, citations: [], grounded: true });
+    if (acc) renderInterrupted(pending, acc);
     else renderError(pending, "The connection closed unexpectedly.");
     finish();
   });
@@ -455,9 +495,9 @@ el.consentAccept.addEventListener("click", async () => {
   hideConsent();
   addCurrentTab(); // continue the add the user started
 });
-el.consentCancel.addEventListener("click", hideConsent);
+el.consentCancel.addEventListener("click", dismissConsent);
 el.consentOverlay.addEventListener("click", (event) => {
-  if (event.target === el.consentOverlay) hideConsent();
+  if (event.target === el.consentOverlay) dismissConsent();
 });
 el.askInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
